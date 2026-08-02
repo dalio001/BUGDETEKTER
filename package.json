@@ -1,0 +1,24 @@
+{
+  "name": "bugdetekter",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Bug monitoring & reporting tool with Claude integration — Sentry-style error capture, manual reports, and an MCP server.",
+  "workspaces": [
+    "sdk",
+    "backend",
+    "dashboard",
+    "mcp-server",
+    "e2e"
+  ],
+  "scripts": {
+    "migrate": "npm run migrate -w backend",
+    "seed": "npm run seed -w backend",
+    "dev:backend": "npm run dev -w backend",
+    "build": "npm run build -w sdk && npm run build -w dashboard",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
