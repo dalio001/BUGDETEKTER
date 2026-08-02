@@ -1,0 +1,44 @@
+# Convenience deployment: Postgres + the app (backend serving the built dashboard/SDK).
+# First run:  docker compose up --build
+# Then once:  docker compose exec app npm run migrate && docker compose exec app npm run seed
+#
+# NOTE: mirrors the verified local setup, but this compose file itself was authored in an
+# environment without a Docker daemon — report issues if something needs a tweak.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: bugdetekter
+      POSTGRES_PASSWORD: bugdetekter
+      POSTGRES_DB: bugdetekter
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bugdetekter"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://bugdetekter:bugdetekter@db:5432/bugdetekter
+      PORT: "4000"
+      # Set real random secrets before exposing this anywhere:
+      JWT_SECRET: change-me-jwt-secret
+      SIGNING_SECRET: change-me-signing-secret
+      STORAGE_DRIVER: local
+      STORAGE_DIR: /data/uploads
+      ADMIN_EMAIL: admin@example.com
+      ADMIN_PASSWORD: change-me-now
+    volumes:
+      - uploads:/data/uploads
+    ports:
+      - "4000:4000"
+
+volumes:
+  pgdata:
+  uploads:
