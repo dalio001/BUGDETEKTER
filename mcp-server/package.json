@@ -1,0 +1,22 @@
+{
+  "name": "@bugdetekter/mcp-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "bugdetekter-mcp": "src/index.ts"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.11.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
