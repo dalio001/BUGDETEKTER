@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>BugDetekter SDK test page</title>
+</head>
+<body>
+  <h1>BugDetekter SDK test page</h1>
+  <p>Pass <code>?key=pk_...&amp;endpoint=...</code> in the URL. Buttons trigger each capture type.</p>
+
+  <button id="btn-throw">Throw error</button>
+  <button id="btn-throw-again">Throw same error again</button>
+  <button id="btn-reject">Unhandled rejection</button>
+  <button id="btn-console">console.error</button>
+  <button id="btn-fetch-404">fetch 404</button>
+  <button id="btn-fetch-fail">fetch unreachable</button>
+  <button id="btn-xhr-404">XHR 404</button>
+  <button id="btn-manual">captureException</button>
+  <button id="btn-flush">Flush</button>
+
+  <script src="/sdk/bugdetekter.min.js"></script>
+  <script>
+    var params = new URLSearchParams(location.search);
+    BugDetekter.init({
+      endpoint: params.get('endpoint') || (location.origin + '/api/ingest'),
+      key: params.get('key') || 'pk_missing',
+      capture: { console: true, network: true, performance: params.get('perf') === '1' },
+      slowLoadThreshold: Number(params.get('slowLoadThreshold') || 3000),
+      flushInterval: 500,
+      metadata: { page: 'testpage' }
+    });
+
+    function brokenRender() {
+      var user = undefined;
+      return user.name; // TypeError, same fingerprint from both buttons
+    }
+
+    document.getElementById('btn-throw').onclick = function () { brokenRender(); };
+    document.getElementById('btn-throw-again').onclick = function () { brokenRender(); };
+    document.getElementById('btn-reject').onclick = function () {
+      Promise.reject(new Error('async save failed'));
+    };
+    document.getElementById('btn-console').onclick = function () {
+      console.error('Widget failed to hydrate', { widgetId: 42 });
+    };
+    document.getElementById('btn-fetch-404').onclick = function () {
+      fetch('/api/definitely-missing').catch(function () {});
+    };
+    document.getElementById('btn-fetch-fail').onclick = function () {
+      fetch('http://127.0.0.1:1/unreachable').catch(function () {});
+    };
+    document.getElementById('btn-xhr-404').onclick = function () {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', '/api/also-missing');
+      xhr.send();
+    };
+    document.getElementById('btn-manual').onclick = function () {
+      try {
+        JSON.parse('{nope');
+      } catch (err) {
+        BugDetekter.captureException(err, { context: 'manual-button' });
+      }
+    };
+    document.getElementById('btn-flush').onclick = function () { BugDetekter.flush(); };
+  </script>
+</body>
+</html>
