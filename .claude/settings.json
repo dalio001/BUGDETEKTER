@@ -9,7 +9,7 @@
             "type": "command",
             "if": "Bash(git *)",
             "timeout": 15,
-            "command": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0\n[ -f \"$root/CLAUDE.md\" ] || exit 0\ngrep -q \"^## Progress log\" \"$root/CLAUDE.md\" || exit 0\nsha=$(git -C \"$root\" rev-parse --short HEAD 2>/dev/null) || exit 0\nmarker=$(printf '`%s`' \"$sha\")\ngrep -qF \"$marker\" \"$root/CLAUDE.md\" && exit 0\nprintf -- '- %s — %s (%s)\\n' \"$(git -C \"$root\" log -1 --pretty=%s)\" \"$marker\" \"$(git -C \"$root\" log -1 --date=short --pretty=%ad)\" >> \"$root/CLAUDE.md\"\n"
+            "command": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0\n[ -f \"$root/CLAUDE.md\" ] || exit 0\ngrep -q \"^## Progress log\" \"$root/CLAUDE.md\" || exit 0\nsha=$(git -C \"$root\" rev-parse --short HEAD 2>/dev/null) || exit 0\nmarker=$(printf '`%s`' \"$sha\")\ngrep -qF \"$marker\" \"$root/CLAUDE.md\" && exit 0\nchanged=$(git -C \"$root\" diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null)\nif [ \"$changed\" = \"CLAUDE.md\" ]; then\n  stray=$(git -C \"$root\" diff-tree -p --no-commit-id HEAD -- CLAUDE.md 2>/dev/null | grep '^+' | grep -v '^+++' | grep -cvE '^\\+- .+ — `[0-9a-f]{7,}` \\([0-9]{4}-[0-9]{2}-[0-9]{2}\\)$')\n  [ \"${stray:-1}\" -eq 0 ] && exit 0\nfi\nprintf -- '- %s — %s (%s)\\n' \"$(git -C \"$root\" log -1 --pretty=%s)\" \"$marker\" \"$(git -C \"$root\" log -1 --date=short --pretty=%ad)\" >> \"$root/CLAUDE.md\"\n"
           }
         ]
       }
