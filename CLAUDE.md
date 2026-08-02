@@ -95,3 +95,4 @@ Optional image slimming: move `tsx` to `dependencies` + `npm prune --omit=dev` i
 - build(docker): harden the deploy path — build context, auto-migrate, supervision — `f488c63` (2026-08-02)
 - docs: production deployment guide, systemd unit, tracker update — `ec8bdb0` (2026-08-02)
 - chore(claude): auto-log every commit to the CLAUDE.md progress log — `02921ca` (2026-08-02)
+- docs: log the progress-hook commit — `e37772a` (2026-08-02)
