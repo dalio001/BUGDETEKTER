@@ -1,0 +1,51 @@
+; systemd unit for the bare-metal / VPS deployment (see README "Production deployment").
+; Install to /etc/systemd/system/bugdetekter.service, then:
+;   sudo systemctl daemon-reload && sudo systemctl enable --now bugdetekter
+;   journalctl -u bugdetekter -f
+
+[Unit]
+Description=BugDetekter — bug monitoring backend (serves dashboard + SDK)
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=bugdetekter
+Group=bugdetekter
+WorkingDirectory=/opt/bugdetekter
+
+; EnvironmentFile first, then Environment= layers on top — same "real env wins"
+; precedence the app applies to backend/.env itself.
+; NOTE: this is not a shell. KEY=value only; no `export`, no $VAR expansion.
+EnvironmentFile=/opt/bugdetekter/backend/.env
+Environment=NODE_ENV=production
+Environment=MIGRATE_ON_BOOT=true
+
+; Equivalent to `npm run start:prod -w backend`, but with no npm between systemd
+; and node, so SIGTERM reaches the shutdown handler. `--import tsx` resolves
+; against WorkingDirectory -> /opt/bugdetekter/node_modules/tsx.
+; Check your path: `command -v node`. nvm installs will NOT work here (systemd
+; does not read your shell profile) — use a system-wide Node >= 20.12.
+ExecStart=/usr/bin/node --import tsx /opt/bugdetekter/backend/src/server.ts
+
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+; The SSE feed holds requests open; give shutdown room before SIGKILL.
+TimeoutStopSec=20
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bugdetekter
+
+; --- optional hardening; comment out if you hit EROFS/EACCES ---
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+; Creates and owns /var/lib/bugdetekter, writable despite ProtectSystem=strict.
+; Set STORAGE_DIR=/var/lib/bugdetekter/uploads in backend/.env to match.
+StateDirectory=bugdetekter
+
+[Install]
+WantedBy=multi-user.target

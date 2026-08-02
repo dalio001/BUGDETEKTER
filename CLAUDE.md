@@ -26,17 +26,31 @@ an empty database: migrate/seed, build, boot, and the full journey all pass.
   defaults + wrong DB migrated). Now loaded via `process.loadEnvFile`; prod refuses to boot on
   published placeholder secrets; docker-compose requires real secrets.
 - Readiness audit (production-ops / doc-accuracy / spec-coverage / real-world-use). See "Open items".
+- Deploy hardening: `.dockerignore` (context 188MB→488KB; verified via real Docker that `.env`,
+  node_modules, dist and .git no longer enter the image); migrations auto-applied in-process on
+  boot behind `MIGRATE_ON_BOOT`, before the port opens; migration runner moved to
+  `backend/src/migrate.ts` with a **session** advisory lock (3 concurrent runs previously crashed
+  2 of 3 — now all exit 0 with exactly one apply); `restart: unless-stopped` + app healthcheck;
+  non-root container with node as PID 1 for real SIGTERM handling; Postgres healthcheck forced to
+  TCP (socket check is a false positive during initdb); seed is idempotent for API tokens;
+  `start:prod` + `deploy/bugdetekter.service` for the bare-metal path.
 
 ## Open items / next steps (from readiness audit; none block local use)
-Blockers for a public deployment: add `.dockerignore`; actually run the Docker path; auto-run
-migrations on deploy + a documented prod start command; data retention/prune (events grow forever);
-process supervision/restart; noise filtering (`Script error.`/extensions/bots), and make `ignored`
-truly mute (new events still bump ignored issues today).
+**Docker images cannot be pulled in this sandbox** — `production.cloudfront.docker.com` is blocked
+by egress policy (403), so `docker compose up` has still never been executed end-to-end. Everything
+it depends on was verified another way (see above + the fallback prod-mode boot), but the first real
+`docker compose up --build` on an unrestricted network remains unproven. Try it there first.
+
+Blockers for a public deployment: data retention/prune (events grow forever); noise filtering
+(`Script error.`/extensions/bots), and make `ignored` truly mute (new events still bump ignored
+issues today).
 High value: source-map support (minified prod stacks are unreadable — biggest UX gap); first-class
 release/version tagging; let Claude see screenshot bytes (MCP returns URLs only); DB+uploads
-backups; document TLS + `COOKIE_SECURE=true`; async password hashing (login uses sync scryptSync →
-event-loop DoS); doc fixes (Node ≥20.12, citext+pgcrypto, Playwright install, e2e env vars); revisit
-600/min/key ingest cap; bulk triage + stack-content search; real user identity.
+backups; async password hashing (login uses sync scryptSync → event-loop DoS); doc fixes (Node
+≥20.12, citext+pgcrypto, Playwright install, e2e env vars); revisit 600/min/key ingest cap; bulk
+triage + stack-content search; real user identity.
+Optional image slimming: move `tsx` to `dependencies` + `npm prune --omit=dev` in the build stage
+(~90MB of build/test-only deps). Deliberately deferred — untestable here without image pulls.
 
 ## Key decisions / caveats
 - Single-owner (not multi-tenant); dashboard-only alerts (no email/Slack); Claude has read+write.

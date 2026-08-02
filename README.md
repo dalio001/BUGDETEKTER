@@ -84,22 +84,69 @@ claude mcp add bugdetekter \
   -- npx tsx /path/to/BUGDETEKTER/mcp-server/src/index.ts
 ```
 
-## Docker
+## Production deployment
 
-> The compose file is provided for convenience and mirrors the verified local setup, but was
-> not itself run in this project's CI environment (no Docker daemon available there).
+**Before you deploy:** generate real `JWT_SECRET` and `SIGNING_SECRET` values — with
+`NODE_ENV=production` the app refuses to start on the placeholders shipped in this repo. Put a
+TLS terminator (nginx, Caddy, Traefik) in front and set `COOKIE_SECURE=true`.
+
+**Migrations run automatically on boot** in both paths below (`MIGRATE_ON_BOOT=true`), before the
+port opens — so a healthy `/api/health` means the schema is current. The runner takes a Postgres
+advisory lock, so several instances starting at once is safe. `npm run migrate` remains available
+for running them by hand.
+
+### Docker Compose
 
 ```bash
-# secrets are required — compose refuses to start without them
 export JWT_SECRET=$(openssl rand -hex 32)
 export SIGNING_SECRET=$(openssl rand -hex 32)
 export ADMIN_PASSWORD='pick-something-strong'
 
-docker compose up --build
-# first run only, in another terminal:
-docker compose exec app npm run migrate
-docker compose exec app npm run seed
+docker compose up --build --wait      # --wait fails loudly instead of crash-looping
+
+# once, to create the admin user + first project:
+docker compose exec app node --import tsx backend/scripts/seed.ts
 ```
+
+The seed prints the admin login, the project's ingest key, and an API token for Claude. It is safe
+to re-run: it will not duplicate the user, project, or token.
+
+Both services use `restart: unless-stopped`, and the app has a healthcheck, so a crash or a host
+reboot brings it back. The container runs as the non-root `node` user; a *fresh* named volume
+inherits that ownership. If you ever mount a pre-existing root-owned uploads volume, screenshot
+uploads fail with `EACCES` — fix with:
+
+```bash
+docker compose run --rm --user root app chown -R node:node /data/uploads
+```
+
+### Bare metal / VPS (systemd)
+
+```bash
+sudo useradd --system --home /opt/bugdetekter bugdetekter
+sudo git clone <this-repo> /opt/bugdetekter && cd /opt/bugdetekter
+
+# NOTE: do NOT set NODE_ENV=production for the install — tsx (the runtime) and
+# vite/esbuild (the build) are devDependencies and would be skipped.
+sudo -u bugdetekter npm ci
+sudo -u bugdetekter npm run build
+
+sudo -u bugdetekter cp backend/.env.example backend/.env   # fill in secrets + DATABASE_URL
+#   also set STORAGE_DIR=/var/lib/bugdetekter/uploads to match the unit file
+
+sudo cp deploy/bugdetekter.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now bugdetekter
+journalctl -u bugdetekter -f
+```
+
+[`deploy/bugdetekter.service`](deploy/bugdetekter.service) documents the traps (systemd's
+`EnvironmentFile` is not a shell; nvm-installed Node will not work; `ProtectSystem=strict` needs
+`StateDirectory`).
+
+### Not handled yet (v1)
+
+No event retention/pruning (the `events` table grows forever), no automated backups for the
+database or uploads volume, and no built-in TLS. See `CLAUDE.md` for the full open-items list.
 
 ## Verification / e2e suite
 
