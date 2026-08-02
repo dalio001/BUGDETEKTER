@@ -38,12 +38,21 @@ async function main() {
   }
   console.log(`ingest key: ${ingestKey}`);
 
-  const token = generateApiToken();
-  await db.query(
-    `INSERT INTO api_tokens (name, token_hash, scope, created_by) VALUES ($1, $2, 'write', $3)`,
-    ['seeded-mcp-token', sha256(token), userId]
-  );
-  console.log(`API token (write scope, shown once): ${token}`);
+  // Only mint a token when there isn't one. Re-running seed on a deploy would
+  // otherwise leave a trail of orphan write-scope tokens that can never be
+  // matched back to their (long since printed) values.
+  const existingToken = await db.query(`SELECT name FROM api_tokens LIMIT 1`);
+  if (existingToken.rows.length > 0) {
+    console.log(`API token already exists ("${existingToken.rows[0].name}") — not creating another.`);
+    console.log('Create or revoke tokens in the dashboard under "API tokens".');
+  } else {
+    const token = generateApiToken();
+    await db.query(
+      `INSERT INTO api_tokens (name, token_hash, scope, created_by) VALUES ($1, $2, 'write', $3)`,
+      ['seeded-mcp-token', sha256(token), userId]
+    );
+    console.log(`API token (write scope, shown once): ${token}`);
+  }
 
   await db.end();
 }

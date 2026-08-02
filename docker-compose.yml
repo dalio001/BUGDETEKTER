@@ -1,12 +1,18 @@
-# Convenience deployment: Postgres + the app (backend serving the built dashboard/SDK).
-# First run:  docker compose up --build
-# Then once:  docker compose exec app npm run migrate && docker compose exec app npm run seed
+# Convenience deployment: Postgres + the app (backend serves the built dashboard + SDK).
 #
-# NOTE: mirrors the verified local setup, but this compose file itself was authored in an
-# environment without a Docker daemon — report issues if something needs a tweak.
+#   export JWT_SECRET=$(openssl rand -hex 32)
+#   export SIGNING_SECRET=$(openssl rand -hex 32)
+#   export ADMIN_PASSWORD='pick-something-strong'
+#   docker compose up --build --wait
+#
+# Migrations run automatically on boot. Seed the admin user once, by hand:
+#   docker compose exec app node --import tsx backend/scripts/seed.ts
+name: bugdetekter
+
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: bugdetekter
       POSTGRES_PASSWORD: bugdetekter
@@ -14,19 +20,29 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bugdetekter"]
+      # -h 127.0.0.1 forces a TCP check. During first-boot initdb the official image
+      # runs a temporary server on the unix socket only, so a socket-based pg_isready
+      # reports ready before the database accepts real connections — and the app
+      # would start, fail to connect, and crash-loop.
+      test: ["CMD-SHELL", "pg_isready -U bugdetekter -d bugdetekter -h 127.0.0.1"]
       interval: 5s
       timeout: 3s
       retries: 10
+      start_period: 10s
 
   app:
     build: .
+    restart: unless-stopped
+    init: true
     depends_on:
       db:
         condition: service_healthy
     environment:
       DATABASE_URL: postgres://bugdetekter:bugdetekter@db:5432/bugdetekter
       PORT: "4000"
+      # Apply pending migrations during boot, before the port opens. Safe with
+      # several replicas: the runner holds a Postgres advisory lock for the run.
+      MIGRATE_ON_BOOT: "true"
       # REQUIRED: generate real values (openssl rand -hex 32). The app runs with
       # NODE_ENV=production and refuses to start while these are placeholders.
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET, e.g. openssl rand -hex 32}
@@ -39,6 +55,20 @@ services:
       - uploads:/data/uploads
     ports:
       - "4000:4000"
+    healthcheck:
+      # node:22-slim ships no curl/wget; Node 22 has a global fetch. process.exit is
+      # explicit so a keep-alive socket cannot delay the check.
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4000/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # The SSE feed (/api/feed) holds requests open; give shutdown room before SIGKILL.
+    stop_grace_period: 20s
 
 volumes:
   pgdata:

@@ -6,6 +6,8 @@ const packageRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..'
 
 export interface Config {
   databaseUrl: string;
+  /** Apply pending migrations during boot, before the port opens. */
+  migrateOnBoot: boolean;
   port: number;
   host: string;
   jwtSecret: string;
@@ -90,6 +92,9 @@ export function loadConfig(): Config {
 
   return {
     databaseUrl: env('DATABASE_URL', 'postgres://bugdetekter:bugdetekter@127.0.0.1:5432/bugdetekter'),
+    // Default off so the documented local workflow (`npm run migrate`) is unchanged;
+    // the container and the systemd unit switch it on.
+    migrateOnBoot: env('MIGRATE_ON_BOOT', 'false') === 'true',
     port: Number(env('PORT', '4000')),
     host: env('HOST', '0.0.0.0'),
     jwtSecret,

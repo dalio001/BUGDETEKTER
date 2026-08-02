@@ -1,10 +1,13 @@
 import { loadConfig } from './config.js';
 import { createPool } from './db.js';
+import { runMigrations } from './migrate.js';
 import { buildApp } from './app.js';
 
 async function main() {
   const config = loadConfig();
   const db = createPool(config.databaseUrl);
+  // Before the port opens, so a healthy /api/health implies the schema is current.
+  if (config.migrateOnBoot) await runMigrations(db);
   const app = await buildApp(config, db);
 
   const shutdown = async () => {
