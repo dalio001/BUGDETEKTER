@@ -4,13 +4,16 @@ import cookie from '@fastify/cookie';
 import type { Config } from './config.js';
 import type { Db } from './db.js';
 import { registerAuth } from './auth.js';
+import { FeedBus } from './feed.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerTokenRoutes } from './routes/tokens.js';
+import { registerIngestRoutes } from './routes/ingest.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
     config: Config;
     db: Db;
+    feed: FeedBus;
   }
 }
 
@@ -22,6 +25,7 @@ export async function buildApp(config: Config, db: Db): Promise<FastifyInstance>
 
   app.decorate('config', config);
   app.decorate('db', db);
+  app.decorate('feed', new FeedBus());
 
   await app.register(cookie);
   await app.register(cors, {
@@ -37,6 +41,7 @@ export async function buildApp(config: Config, db: Db): Promise<FastifyInstance>
   registerAuth(app);
   registerAuthRoutes(app);
   registerTokenRoutes(app);
+  registerIngestRoutes(app);
 
   return app;
 }
