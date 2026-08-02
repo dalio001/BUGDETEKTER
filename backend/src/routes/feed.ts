@@ -26,8 +26,10 @@ export function registerFeedRoutes(app: FastifyInstance): void {
         reply.raw.write(`event: issue_update\ndata: ${JSON.stringify(event)}\n\n`);
       });
 
+      // Named event (not an SSE comment) so EventSource clients can watch for
+      // liveness and fall back to polling when a proxy swallows the stream.
       const heartbeat = setInterval(() => {
-        reply.raw.write(`: ping ${Date.now()}\n\n`);
+        reply.raw.write(`event: ping\ndata: {"t":${Date.now()}}\n\n`);
       }, HEARTBEAT_MS);
 
       request.raw.on('close', () => {
