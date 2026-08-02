@@ -12,8 +12,12 @@ npm run dev        # tsx watch src/server.ts  (or: npm start)
 npm test           # fingerprint/grouping unit tests
 ```
 
-Configuration is environment-driven — see [.env.example](.env.example). `tsx` runs the
-TypeScript directly; there is no build step for the server.
+Configuration is environment-driven — see [.env.example](.env.example). `backend/.env` is loaded
+automatically by `loadConfig()` (used by the server, `migrate`, and `seed`); real environment
+variables override it, and `BUGDETEKTER_ENV_FILE` points at a different file. With
+`NODE_ENV=production` the server refuses to boot while `JWT_SECRET`/`SIGNING_SECRET` are still
+the public development defaults. `tsx` runs the TypeScript directly; there is no build step for
+the server.
 
 ## How grouping works
 

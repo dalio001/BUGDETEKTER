@@ -46,6 +46,7 @@ createdb bugdetekter -O bugdetekter
 # 2. install + migrate + seed
 npm install
 cp backend/.env.example backend/.env      # set DATABASE_URL + real secrets
+#    generate secrets with: openssl rand -hex 32
 npm run migrate
 npm run seed                              # prints admin login, ingest key, and an API token
 
@@ -53,6 +54,11 @@ npm run seed                              # prints admin login, ingest key, and 
 npm run build
 npm run dev:backend                       # http://localhost:4000
 ```
+
+`backend/.env` is read automatically at startup; real environment variables (from Docker,
+systemd, your shell) take precedence over it. **Set `JWT_SECRET` and `SIGNING_SECRET` before
+exposing this publicly** — the built-in defaults are in this repository, so anyone could forge a
+session with them. Running with `NODE_ENV=production` refuses to start until you do.
 
 Log in at `http://localhost:4000` with the seeded credentials, open **Projects**, and copy the
 embed snippet for your site:
@@ -84,6 +90,11 @@ claude mcp add bugdetekter \
 > not itself run in this project's CI environment (no Docker daemon available there).
 
 ```bash
+# secrets are required — compose refuses to start without them
+export JWT_SECRET=$(openssl rand -hex 32)
+export SIGNING_SECRET=$(openssl rand -hex 32)
+export ADMIN_PASSWORD='pick-something-strong'
+
 docker compose up --build
 # first run only, in another terminal:
 docker compose exec app npm run migrate

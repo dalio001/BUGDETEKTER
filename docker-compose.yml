@@ -27,13 +27,14 @@ services:
     environment:
       DATABASE_URL: postgres://bugdetekter:bugdetekter@db:5432/bugdetekter
       PORT: "4000"
-      # Set real random secrets before exposing this anywhere:
-      JWT_SECRET: change-me-jwt-secret
-      SIGNING_SECRET: change-me-signing-secret
+      # REQUIRED: generate real values (openssl rand -hex 32). The app runs with
+      # NODE_ENV=production and refuses to start while these are placeholders.
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET, e.g. openssl rand -hex 32}
+      SIGNING_SECRET: ${SIGNING_SECRET:?set SIGNING_SECRET, e.g. openssl rand -hex 32}
       STORAGE_DRIVER: local
       STORAGE_DIR: /data/uploads
-      ADMIN_EMAIL: admin@example.com
-      ADMIN_PASSWORD: change-me-now
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD for the seeded admin account}
     volumes:
       - uploads:/data/uploads
     ports:
