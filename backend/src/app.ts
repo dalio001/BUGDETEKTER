@@ -3,6 +3,9 @@ import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import type { Config } from './config.js';
 import type { Db } from './db.js';
+import { registerAuth } from './auth.js';
+import { registerAuthRoutes } from './routes/auth.js';
+import { registerTokenRoutes } from './routes/tokens.js';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -30,6 +33,10 @@ export async function buildApp(config: Config, db: Db): Promise<FastifyInstance>
     await db.query('SELECT 1');
     return { ok: true };
   });
+
+  registerAuth(app);
+  registerAuthRoutes(app);
+  registerTokenRoutes(app);
 
   return app;
 }
