@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git *)",
+            "timeout": 15,
+            "command": "root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0\n[ -f \"$root/CLAUDE.md\" ] || exit 0\ngrep -q \"^## Progress log\" \"$root/CLAUDE.md\" || exit 0\nsha=$(git -C \"$root\" rev-parse --short HEAD 2>/dev/null) || exit 0\nmarker=$(printf '`%s`' \"$sha\")\ngrep -qF \"$marker\" \"$root/CLAUDE.md\" && exit 0\nprintf -- '- %s — %s (%s)\\n' \"$(git -C \"$root\" log -1 --pretty=%s)\" \"$marker\" \"$(git -C \"$root\" log -1 --date=short --pretty=%ad)\" >> \"$root/CLAUDE.md\"\n"
+          }
+        ]
+      }
+    ]
+  }
+}

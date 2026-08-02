@@ -2,6 +2,13 @@
 
 Cross-session working notes for Claude. Read this first when resuming.
 
+## Keeping this file current
+A hook (`.claude/settings.json`) appends every commit to the **Progress log** at the bottom
+automatically — that part needs no effort. The hook cannot write prose, so **whenever you finish a
+piece of work, update the narrative sections in the same commit**: move finished items from
+"Open items" into "Completed", and correct "Status" if it changed. A stale Status is worse than no
+Status, because the next session trusts it.
+
 ## What this is
 Self-hosted, single-owner bug-monitoring tool with Claude integration. npm-workspaces monorepo:
 `sdk/` (embeddable browser SDK), `backend/` (Fastify 5 + Postgres), `dashboard/` (React + Vite,
@@ -67,3 +74,23 @@ Optional image slimming: move `tsx` to `dependencies` + `npm prune --omit=dev` i
 - Tests: `npm test -w backend`. E2E (needs backend up): `CHROMIUM_PATH=/opt/pw-browsers/chromium
   node e2e/sdk-capture.spec.mjs` (also `dashboard.spec.mjs`, `mcp-drive.mjs`).
 - Git: develop on `claude/bug-monitoring-reporting-tool-88kw31`; push `-u origin` w/ backoff.
+
+## Progress log
+<!-- Appended automatically by the PostToolUse hook in .claude/settings.json. Newest last. -->
+- chore: scaffold npm-workspaces monorepo — `79ad0c9` (2026-08-02)
+- feat(backend): Fastify skeleton, Postgres schema, migration runner, seed script — `10d27e7` (2026-08-02)
+- feat(backend): dashboard auth (JWT cookie) and scoped API tokens — `9833d17` (2026-08-02)
+- feat(backend): ingest endpoint with fingerprinting, issue grouping, regression reopen — `529498c` (2026-08-02)
+- feat(backend): issues/reports/comments/stats APIs, storage drivers, signed URLs, SSE feed — `2d3d96e` (2026-08-02)
+- feat(sdk): embeddable browser SDK with error/rejection/console/network/perf capture — `c43c2ac` (2026-08-02)
+- feat(dashboard): Vite/React app — login, projects, live issues list, issue detail — `9f48be3` (2026-08-02)
+- feat(dashboard): manual report form with image dropzone, overview trends, token management — `38e97bd` (2026-08-02)
+- feat(mcp): MCP stdio server exposing five issue tools for Claude — `0acca75` (2026-08-02)
+- docs: root + per-component READMEs, Dockerfile, docker-compose — `0625b00` (2026-08-02)
+- test(e2e): browser SDK capture, dashboard flow, and MCP drive suites — `df561f4` (2026-08-02)
+- fix(security): block stored-XSS via SVG attachments and tighten CORS — `0f55c0b` (2026-08-02)
+- fix: harden ingest against hostile input; fix paging, chart span and UI races — `6377166` (2026-08-02)
+- fix(config): actually load backend/.env and refuse to run on published secrets — `6a541f5` (2026-08-02)
+- docs: add CLAUDE.md cross-session progress tracker — `ce5c725` (2026-08-02)
+- build(docker): harden the deploy path — build context, auto-migrate, supervision — `f488c63` (2026-08-02)
+- docs: production deployment guide, systemd unit, tracker update — `ec8bdb0` (2026-08-02)
