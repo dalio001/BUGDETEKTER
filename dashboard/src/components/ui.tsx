@@ -85,19 +85,31 @@ export interface Bucket {
 }
 
 /** Hand-rolled SVG bar chart: fills gaps in the time series so quiet periods show as empty space. */
-export function TrendChart({ buckets, bucket, height = 120 }: { buckets: Bucket[]; bucket: 'hour' | 'day'; height?: number }) {
+export function TrendChart({
+  buckets,
+  bucket,
+  range,
+  height = 120
+}: {
+  buckets: Bucket[];
+  bucket: 'hour' | 'day';
+  range?: string;
+  height?: number;
+}) {
   const series = useMemo(() => {
     if (buckets.length === 0) return [];
     const step = bucket === 'hour' ? 3600 : 86_400;
     const nowBucket = Math.floor(Date.now() / 1000 / step) * step;
-    const span = bucket === 'hour' ? 24 : buckets.length > 8 ? 30 : 7;
+    // The span comes from the selected range, not from how many buckets came
+    // back — a sparse 30d window has few buckets but still spans 30 days.
+    const span = bucket === 'hour' ? 24 : range === '30d' ? 30 : 7;
     const start = nowBucket - (span - 1) * step;
     const map = new Map(buckets.map((b) => [b.t, b.count]));
     return Array.from({ length: span }, (_, i) => {
       const t = start + i * step;
       return { t, count: map.get(t) ?? 0 };
     });
-  }, [buckets, bucket]);
+  }, [buckets, bucket, range]);
 
   if (series.length === 0) return <div className="empty">No events in this period</div>;
 

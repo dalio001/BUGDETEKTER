@@ -66,7 +66,16 @@ export function registerIssueRoutes(app: FastifyInstance): void {
       params
     );
 
-    const total = rows[0]?.total ?? 0;
+    // COUNT(*) OVER() only rides along on returned rows, so an offset past the
+    // end would otherwise report total=0 and strand the pagination controls.
+    let total: number = rows[0]?.total ?? 0;
+    if (rows.length === 0 && offset > 0) {
+      const { rows: countRows } = await app.db.query(
+        `SELECT COUNT(*)::int AS total FROM issues i ${where.length ? `WHERE ${where.join(' AND ')}` : ''}`,
+        params.slice(0, params.length - 2)
+      );
+      total = countRows[0]?.total ?? 0;
+    }
     const issues = rows.map(({ total: _t, ...issue }) => issue);
 
     // 24h hourly sparkline per listed issue, one grouped query for the page.
@@ -151,9 +160,13 @@ export function registerIssueRoutes(app: FastifyInstance): void {
       if (!isUuid(id)) return reply.code(400).send({ error: 'invalid issue id' });
       const { status, priority, category } = request.body ?? {};
 
+      // Treat '' like null so clearing a select in the dashboard unsets the field.
+      const nextPriority = priority === '' ? null : priority;
+      const nextCategory = category === '' ? null : category;
+
       if (status !== undefined && !STATUSES.has(status)) return reply.code(400).send({ error: 'invalid status' });
-      if (priority !== undefined && priority !== null && !PRIORITIES.has(priority)) return reply.code(400).send({ error: 'invalid priority' });
-      if (category !== undefined && category !== null && !CATEGORIES.has(category)) return reply.code(400).send({ error: 'invalid category' });
+      if (nextPriority !== undefined && nextPriority !== null && !PRIORITIES.has(nextPriority)) return reply.code(400).send({ error: 'invalid priority' });
+      if (nextCategory !== undefined && nextCategory !== null && !CATEGORIES.has(nextCategory)) return reply.code(400).send({ error: 'invalid category' });
       if (status === undefined && priority === undefined && category === undefined) {
         return reply.code(400).send({ error: 'nothing to update' });
       }
@@ -169,12 +182,12 @@ export function registerIssueRoutes(app: FastifyInstance): void {
         sets.push(`status = $${params.length}`);
         sets.push(status === 'resolved' ? 'resolved_at = now()' : 'resolved_at = NULL');
       }
-      if (priority !== undefined) {
-        params.push(priority);
+      if (nextPriority !== undefined) {
+        params.push(nextPriority);
         sets.push(`priority = $${params.length}`);
       }
-      if (category !== undefined) {
-        params.push(category);
+      if (nextCategory !== undefined) {
+        params.push(nextCategory);
         sets.push(`category = $${params.length}`);
       }
 

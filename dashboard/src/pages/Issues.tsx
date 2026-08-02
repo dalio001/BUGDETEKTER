@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type Issue, type Project } from '../api';
 import { useLiveFeed } from '../useLiveFeed';
+import { useDebounced } from '../useDebounced';
 import { IssueRow, LiveDot } from '../components/ui';
 
 const PAGE_SIZE = 25;
@@ -24,6 +25,8 @@ export function Issues() {
   const [offset, setOffset] = useState(0);
   const [flash, setFlash] = useState(false);
   const refetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestSeq = useRef(0);
+  const debouncedSearch = useDebounced(search, 300);
 
   useEffect(() => {
     void api.get<{ projects: Project[] }>('/api/projects').then((r) => setProjects(r.projects));
@@ -34,15 +37,18 @@ export function Issues() {
     if (projectId) params.set('project_id', projectId);
     if (status) params.set('status', status);
     if (source) params.set('source', source);
-    if (search) params.set('search', search);
+    if (debouncedSearch) params.set('search', debouncedSearch);
     params.set('sort', sort);
     params.set('limit', String(PAGE_SIZE));
     params.set('offset', String(offset));
+    // Ignore responses that arrive after a newer request was issued.
+    const seq = ++requestSeq.current;
     void api.get<{ issues: Issue[]; total: number }>(`/api/issues?${params}`).then((r) => {
+      if (seq !== requestSeq.current) return;
       setIssues(r.issues);
       setTotal(r.total);
     });
-  }, [projectId, status, source, search, sort, offset]);
+  }, [projectId, status, source, debouncedSearch, sort, offset]);
 
   useEffect(load, [load]);
 

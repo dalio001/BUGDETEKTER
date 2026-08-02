@@ -82,7 +82,7 @@ export function Overview() {
 
           <div className="card" style={{ marginBottom: 18 }}>
             <h2 className="section-title">Events over time</h2>
-            <TrendChart buckets={stats.buckets} bucket={stats.bucket} height={140} />
+            <TrendChart buckets={stats.buckets} bucket={stats.bucket} range={stats.range} height={140} />
           </div>
 
           <h2 className="section-title">Most active issues ({stats.range})</h2>

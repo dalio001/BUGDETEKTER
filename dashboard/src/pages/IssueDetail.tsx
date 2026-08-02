@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, type EventRow, type IssueDetailResponse } from '../api';
 import { useLiveFeed } from '../useLiveFeed';
@@ -15,7 +15,9 @@ export function IssueDetail() {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [eventsTotal, setEventsTotal] = useState(0);
   const [expandedEvent, setExpandedEvent] = useState<number | null>(null);
+  const [activityKey, setActivityKey] = useState(0);
   const [error, setError] = useState('');
+  const statsSeq = useRef(0);
 
   const load = useCallback(() => {
     if (!id) return;
@@ -33,7 +35,11 @@ export function IssueDetail() {
 
   useEffect(() => {
     if (!id) return;
-    void api.get<{ bucket: 'hour' | 'day'; buckets: Bucket[] }>(`/api/issues/${id}/stats?range=${range}`).then(setStats);
+    // Guard against a slow earlier range overwriting the range now selected.
+    const seq = ++statsSeq.current;
+    void api.get<{ bucket: 'hour' | 'day'; buckets: Bucket[] }>(`/api/issues/${id}/stats?range=${range}`).then((r) => {
+      if (seq === statsSeq.current) setStats(r);
+    });
   }, [id, range]);
 
   useLiveFeed(
@@ -58,6 +64,8 @@ export function IssueDetail() {
   const updateIssue = async (patch: Record<string, string>) => {
     await api.patch(`/api/issues/${id}`, patch);
     load();
+    // A status change writes a system comment — pull the activity list along with it.
+    setActivityKey((key) => key + 1);
   };
 
   const loadMoreEvents = async () => {
@@ -121,7 +129,7 @@ export function IssueDetail() {
                 ))}
               </div>
             </div>
-            {stats && <TrendChart buckets={stats.buckets} bucket={stats.bucket} />}
+            {stats && <TrendChart buckets={stats.buckets} bucket={stats.bucket} range={range} />}
           </div>
 
           {issue.description && (
@@ -200,7 +208,7 @@ export function IssueDetail() {
             </div>
           )}
 
-          <Comments issueId={issue.id} />
+          <Comments issueId={issue.id} refreshKey={activityKey} />
         </div>
 
         <div className="detail-side">

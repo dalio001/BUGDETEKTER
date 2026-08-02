@@ -4,8 +4,24 @@ export const SDK_VERSION = '0.1.0';
 
 const MAX_STACK_CHARS = 8_000;
 const MAX_BATCH_BYTES = 55_000; // stay safely under sendBeacon's 64KB budget
+const MAX_QUEUED_EVENTS = 200;
 const DEDUP_WINDOW_MS = 60_000;
 const DEDUP_MAX_PER_WINDOW = 10;
+
+/** UTF-8 byte length — the beacon budget is bytes, not UTF-16 code units. */
+function byteLength(text: string): number {
+  let bytes = 0;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code < 0x80) bytes += 1;
+    else if (code < 0x800) bytes += 2;
+    else if (code >= 0xd800 && code <= 0xdbff) {
+      bytes += 4; // surrogate pair
+      i++;
+    } else bytes += 3;
+  }
+  return bytes;
+}
 
 export class Transport {
   private queue: SdkEvent[] = [];
@@ -27,6 +43,9 @@ export class Transport {
 
   enqueue(event: SdkEvent): void {
     if (this.isBurstDuplicate(event)) return;
+    // Bound memory on a long-lived page whose ingest endpoint is unreachable
+    // (offline, blocked): keep the newest events, drop the oldest.
+    if (this.queue.length >= MAX_QUEUED_EVENTS) this.queue.shift();
     if (event.stack && event.stack.length > MAX_STACK_CHARS) {
       event.stack = event.stack.slice(0, MAX_STACK_CHARS);
     }
@@ -62,12 +81,25 @@ export class Transport {
       let size = 100; // envelope overhead
       while (this.queue.length > 0 && batch.length < this.maxBatch) {
         const next = this.queue[0]!;
-        const nextSize = JSON.stringify(next).length;
+        // User-supplied metadata can be circular or throw in toJSON; such an
+        // event is dropped rather than wedging the queue forever.
+        let nextSize: number;
+        try {
+          nextSize = byteLength(JSON.stringify(next));
+        } catch {
+          this.queue.shift();
+          continue;
+        }
         if (batch.length > 0 && size + nextSize > MAX_BATCH_BYTES) break;
         batch.push(this.queue.shift()!);
         size += nextSize;
       }
-      this.send(JSON.stringify({ key: this.key, sdk: SDK_VERSION, events: batch }), unloading);
+      if (batch.length === 0) continue;
+      try {
+        this.send(JSON.stringify({ key: this.key, sdk: SDK_VERSION, events: batch }), unloading);
+      } catch {
+        // serialization failed for the batch as a whole — drop it
+      }
     }
   }
 

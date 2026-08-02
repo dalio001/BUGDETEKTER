@@ -2,7 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { api, type Comment } from '../api';
 import { timeAgo } from './ui';
 
-export function Comments({ issueId }: { issueId: string }) {
+/** `refreshKey` changes when the parent records activity (e.g. a status change). */
+export function Comments({ issueId, refreshKey = 0 }: { issueId: string; refreshKey?: number }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
@@ -10,7 +11,7 @@ export function Comments({ issueId }: { issueId: string }) {
   const load = () => {
     void api.get<{ comments: Comment[] }>(`/api/issues/${issueId}/comments`).then((r) => setComments(r.comments));
   };
-  useEffect(load, [issueId]);
+  useEffect(load, [issueId, refreshKey]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();

@@ -8,6 +8,10 @@ const MAX_EVENTS_PER_BATCH = 50;
 const MAX_STACK_CHARS = 16_000;
 const MAX_MESSAGE_CHARS = 4_000;
 const RATE_LIMIT_PER_MINUTE = 600;
+const MAX_TRACKED_KEYS = 5_000;
+/** Timestamps outside this window are ignored — Postgres rejects out-of-range values. */
+const MIN_EVENT_TIMESTAMP_MS = Date.UTC(2000, 0, 1);
+const MAX_EVENT_SKEW_MS = 24 * 3600 * 1000;
 
 const EVENT_TYPES = new Set(['exception', 'unhandled_rejection', 'console_error', 'network_error', 'performance']);
 
@@ -22,6 +26,15 @@ class RateLimiter {
 
   take(key: string, count: number): boolean {
     const now = Date.now();
+    // The ingest key is public (it ships in the page source), so unknown keys
+    // reach this map — evict fully-refilled entries before it can grow without
+    // bound.
+    if (this.buckets.size >= MAX_TRACKED_KEYS) {
+      for (const [existingKey, existing] of this.buckets) {
+        if (now - existing.updatedAt > 60_000) this.buckets.delete(existingKey);
+      }
+      if (this.buckets.size >= MAX_TRACKED_KEYS) this.buckets.clear();
+    }
     const bucket = this.buckets.get(key) ?? { tokens: RATE_LIMIT_PER_MINUTE, updatedAt: now };
     const refill = ((now - bucket.updatedAt) / 60_000) * RATE_LIMIT_PER_MINUTE;
     bucket.tokens = Math.min(RATE_LIMIT_PER_MINUTE, bucket.tokens + refill);
@@ -42,6 +55,16 @@ interface IngestBody {
   events?: IngestEvent[];
 }
 
+/** Reject clock-skewed or hostile timestamps that Postgres would refuse. */
+export function isUsableTimestamp(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= MIN_EVENT_TIMESTAMP_MS &&
+    value <= Date.now() + MAX_EVENT_SKEW_MS
+  );
+}
+
 function sanitizeEvent(raw: unknown): IngestEvent | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const e = raw as Record<string, unknown>;
@@ -53,7 +76,7 @@ function sanitizeEvent(raw: unknown): IngestEvent | null {
     stack: typeof e.stack === 'string' ? e.stack.slice(0, MAX_STACK_CHARS) : undefined,
     error_type: typeof e.error_type === 'string' ? e.error_type.slice(0, 200) : undefined,
     url: typeof e.url === 'string' ? e.url.slice(0, 2_000) : undefined,
-    timestamp: typeof e.timestamp === 'number' ? e.timestamp : undefined,
+    timestamp: isUsableTimestamp(e.timestamp) ? e.timestamp : undefined,
     session_id: typeof e.session_id === 'string' ? e.session_id.slice(0, 100) : undefined,
     meta: Object.fromEntries(Object.entries(meta).slice(0, 20))
   };
@@ -178,10 +201,20 @@ export function registerIngestRoutes(app: FastifyInstance): void {
     const projectId: string = project.rows[0].id;
     const ua = parseUa(request.headers['user-agent']);
 
+    // Each event gets a savepoint so one unstorable event is dropped on its
+    // own instead of rejecting the whole (fire-and-forget) batch.
     const results = await withTransaction(app.db, async (client) => {
       const stored: StoredEventResult[] = [];
-      for (const event of events) {
-        stored.push(await storeAutoEvent(client, projectId, event, ua));
+      for (const [index, event] of events.entries()) {
+        const savepoint = `ev_${index}`;
+        await client.query(`SAVEPOINT ${savepoint}`);
+        try {
+          stored.push(await storeAutoEvent(client, projectId, event, ua));
+          await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+        } catch (err) {
+          await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`);
+          request.log.warn({ err, type: event.type }, 'dropped unstorable ingest event');
+        }
       }
       return stored;
     });
@@ -199,6 +232,6 @@ export function registerIngestRoutes(app: FastifyInstance): void {
       });
     }
 
-    return reply.code(202).send({ accepted: results.length });
+    return reply.code(202).send({ accepted: results.length, dropped: events.length - results.length });
   });
 }
