@@ -97,3 +97,4 @@ Optional image slimming: move `tsx` to `dependencies` + `npm prune --omit=dev` i
 - chore(claude): auto-log every commit to the CLAUDE.md progress log — `02921ca` (2026-08-02)
 - docs: log the progress-hook commit — `e37772a` (2026-08-02)
 - docs: progress log entry for e37772a (written by the hook itself) — `8ca73d2` (2026-08-02)
+- fix(claude): stop the progress hook feeding itself — `a64026e` (2026-08-02)
