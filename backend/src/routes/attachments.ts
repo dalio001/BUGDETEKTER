@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { verifyAttachmentSig } from '../security.js';
 import { isUuid } from '../util.js';
-import { saveAttachments } from './reports.js';
+import { ALLOWED_IMAGE_TYPES, saveAttachments } from './reports.js';
 
 export function registerAttachmentRoutes(app: FastifyInstance): void {
   // Signed, expiring URL — the signature is the auth, so <img> tags and
@@ -26,10 +26,19 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
       stream.on('error', () => {
         if (!reply.sent) void reply.code(404).send({ error: 'attachment data missing' });
       });
+      // Uploads are restricted to raster images, but serve them defensively
+      // anyway: never sniff, never script, and only render inline for types
+      // we know are inert.
+      const contentType = ALLOWED_IMAGE_TYPES.has(attachment.mime_type)
+        ? attachment.mime_type
+        : 'application/octet-stream';
+      const disposition = ALLOWED_IMAGE_TYPES.has(attachment.mime_type) ? 'inline' : 'attachment';
       return reply
-        .header('content-type', attachment.mime_type)
-        .header('content-disposition', `inline; filename="${attachment.filename}"`)
+        .header('content-type', contentType)
+        .header('content-disposition', `${disposition}; filename="${attachment.filename}"`)
         .header('cache-control', 'private, max-age=3600')
+        .header('x-content-type-options', 'nosniff')
+        .header('content-security-policy', "default-src 'none'; sandbox")
         .send(stream);
     }
   );
@@ -47,13 +56,15 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
 
       const files: Array<{ filename: string; mimeType: string; data: Buffer }> = [];
       for await (const part of request.parts()) {
-        if (part.type === 'file' && part.mimetype.startsWith('image/') && files.length < 5) {
+        if (part.type === 'file' && ALLOWED_IMAGE_TYPES.has(part.mimetype) && files.length < 5) {
           files.push({ filename: part.filename ?? 'image', mimeType: part.mimetype, data: await part.toBuffer() });
         } else if (part.type === 'file') {
           await part.toBuffer();
         }
       }
-      if (files.length === 0) return reply.code(400).send({ error: 'no image files provided' });
+      if (files.length === 0) {
+        return reply.code(400).send({ error: 'no supported image files provided (png, jpeg, gif, webp)' });
+      }
 
       const attachments = await saveAttachments(app, id, files);
       return reply.code(201).send({ attachments });

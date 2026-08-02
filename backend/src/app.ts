@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import Fastify, { FastifyInstance } from 'fastify';
-import cors from '@fastify/cors';
+import Fastify, { FastifyInstance, FastifyRequest } from 'fastify';
+import cors, { type FastifyCorsOptions } from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
@@ -46,7 +46,17 @@ export async function buildApp(config: Config, db: Db): Promise<FastifyInstance>
   app.decorate('storage', await createStorage(config));
 
   await app.register(cookie);
-  await app.register(cors, { origin: true, credentials: true });
+  // Ingest must accept beacons from any customer site, but it never reads
+  // cookies — so it gets wildcard CORS *without* credentials. Everything else
+  // is same-origin (the dashboard is served from this app); only explicitly
+  // configured origins may make credentialed cross-origin calls.
+  await app.register(cors, () => (request: FastifyRequest, callback: (err: Error | null, options: FastifyCorsOptions) => void) => {
+    if (request.url.startsWith('/api/ingest')) {
+      callback(null, { origin: '*', credentials: false, methods: ['POST', 'OPTIONS'] });
+    } else {
+      callback(null, { origin: config.corsOrigins.length > 0 ? config.corsOrigins : false, credentials: true });
+    }
+  });
   await app.register(multipart, {
     limits: { fileSize: 5 * 1024 * 1024, files: 5, fields: 20 }
   });

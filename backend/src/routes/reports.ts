@@ -5,6 +5,13 @@ import { attachmentUrl } from './issues.js';
 
 const MAX_FILES = 5;
 
+/**
+ * Raster formats only. `image/svg+xml` is deliberately excluded: SVGs are
+ * active documents, and serving one back from our own origin would let an
+ * uploaded file script the dashboard.
+ */
+export const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
+
 interface ReportFields {
   project_id?: string;
   title?: string;
@@ -29,7 +36,7 @@ async function readMultipart(request: FastifyRequest): Promise<{ fields: ReportF
         await part.toBuffer(); // drain so the stream can finish
         continue;
       }
-      if (!part.mimetype.startsWith('image/')) {
+      if (!ALLOWED_IMAGE_TYPES.has(part.mimetype)) {
         await part.toBuffer();
         continue;
       }
@@ -100,9 +107,11 @@ export function registerReportRoutes(app: FastifyInstance): void {
         `manual:${randomUUID()}`,
         fields.title.trim().slice(0, 200),
         fields.description ?? null,
-        fields.priority ?? null,
-        fields.category ?? null,
-        fields.page_url?.slice(0, 2000) ?? null
+        // Empty strings are absent values, not enum members — a multipart form
+        // that omits a select still sends "".
+        fields.priority || null,
+        fields.category || null,
+        fields.page_url?.slice(0, 2000) || null
       ]
     );
     const issue = rows[0];

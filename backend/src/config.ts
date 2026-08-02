@@ -5,6 +5,8 @@ export interface Config {
   jwtSecret: string;
   signingSecret: string;
   cookieSecure: boolean;
+  /** Extra origins allowed to make credentialed API calls (dashboard hosted separately). */
+  corsOrigins: string[];
   storageDriver: 'local' | 's3';
   storageDir: string;
   s3: {
@@ -37,6 +39,10 @@ export function loadConfig(): Config {
     jwtSecret: env('JWT_SECRET', 'dev-only-jwt-secret'),
     signingSecret: env('SIGNING_SECRET', 'dev-only-signing-secret'),
     cookieSecure: env('COOKIE_SECURE', 'false') === 'true',
+    corsOrigins: env('CORS_ORIGINS', '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
     storageDriver,
     storageDir: env('STORAGE_DIR', './data/uploads'),
     s3: {
