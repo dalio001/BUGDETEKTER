@@ -90,10 +90,39 @@ claude mcp add bugdetekter \
 `NODE_ENV=production` the app refuses to start on the placeholders shipped in this repo. Put a
 TLS terminator (nginx, Caddy, Traefik) in front and set `COOKIE_SECURE=true`.
 
-**Migrations run automatically on boot** in both paths below (`MIGRATE_ON_BOOT=true`), before the
+**Migrations run automatically on boot** in the paths below (`MIGRATE_ON_BOOT=true`), before the
 port opens — so a healthy `/api/health` means the schema is current. The runner takes a Postgres
 advisory lock, so several instances starting at once is safe. `npm run migrate` remains available
 for running them by hand.
+
+### Railway (or any host without shell access)
+
+Managed hosts build the `Dockerfile` for you but give you nowhere to run `npm run seed`, so the
+first admin account has to be created during boot instead:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (reference the Postgres service) |
+| `JWT_SECRET`, `SIGNING_SECRET` | 64 random hex chars each — the app refuses to start on the repo's placeholders |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | the login you want; the account is created from these |
+| `SEED_ON_BOOT` | `true` |
+| `COOKIE_SECURE` | `true` (the host terminates TLS) |
+| `STORAGE_DIR` | `/data/uploads`, matching a mounted volume |
+
+`NODE_ENV`, `MIGRATE_ON_BOOT` and the start command already come from the `Dockerfile`; leave
+`PORT` to the platform. [`railway.json`](railway.json) points the platform healthcheck at
+`/api/health` so a broken deploy fails instead of going live.
+
+`SEED_ON_BOOT` is idempotent and safe to leave on: it never duplicates the user, project, or token,
+and it **never resets an existing admin's password** — so changing `ADMIN_PASSWORD` later does
+*not* rotate the credential (and cannot be used to recover a forgotten one; do that in the
+database). Unlike `npm run seed` it mints no API token, to keep secrets out of the platform's
+deploy logs — create one in the dashboard under **API tokens**.
+
+Attachment uploads need a writable volume. Hosts commonly mount volumes owned by `root` while this
+image runs as the non-root `node` user; the app checks at boot and logs exactly what to do if the
+directory is not writable (on Railway, setting `RAILWAY_RUN_UID=0` runs the container as root).
+Error capture keeps working either way — only uploads fail.
 
 ### Docker Compose
 

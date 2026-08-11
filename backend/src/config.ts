@@ -8,6 +8,11 @@ export interface Config {
   databaseUrl: string;
   /** Apply pending migrations during boot, before the port opens. */
   migrateOnBoot: boolean;
+  /** Create the first admin + project during boot. For hosts with no shell. */
+  seedOnBoot: boolean;
+  adminEmail: string;
+  /** Empty when unset; required when seedOnBoot is on. */
+  adminPassword: string;
   port: number;
   host: string;
   jwtSecret: string;
@@ -62,6 +67,29 @@ const PLACEHOLDER_SECRETS = new Set([
   'change-me-signing-secret'
 ]);
 
+/** The password the local seed script falls back to — documented, so public. */
+const DEV_ADMIN_PASSWORD = 'admin12345';
+
+/**
+ * Boot-time seeding creates the admin account unattended, so an unset or
+ * published password would silently publish an open door. Checked here rather
+ * than in runSeed so the process refuses before the port ever opens.
+ */
+function assertSeedIsSafe(password: string): void {
+  if (password === '') {
+    throw new Error(
+      'Refusing to start: SEED_ON_BOOT=true needs ADMIN_PASSWORD set — it is the password ' +
+        'the admin account is created with. Set it to something strong.'
+    );
+  }
+  if (password === DEV_ADMIN_PASSWORD && process.env.NODE_ENV === 'production') {
+    throw new Error(
+      `Refusing to start: ADMIN_PASSWORD is "${DEV_ADMIN_PASSWORD}", the demo password published ` +
+        'in this repository. Set a real one.'
+    );
+  }
+}
+
 /** Refuse to run a public deployment on a secret that is published in this repository. */
 function assertSecretsAreSafe(jwtSecret: string, signingSecret: string): void {
   const usingDefaults: string[] = [];
@@ -90,11 +118,18 @@ export function loadConfig(): Config {
   const signingSecret = env('SIGNING_SECRET', DEV_SIGNING_SECRET);
   assertSecretsAreSafe(jwtSecret, signingSecret);
 
+  const seedOnBoot = env('SEED_ON_BOOT', 'false') === 'true';
+  const adminPassword = env('ADMIN_PASSWORD', '');
+  if (seedOnBoot) assertSeedIsSafe(adminPassword);
+
   return {
     databaseUrl: env('DATABASE_URL', 'postgres://bugdetekter:bugdetekter@127.0.0.1:5432/bugdetekter'),
     // Default off so the documented local workflow (`npm run migrate`) is unchanged;
     // the container and the systemd unit switch it on.
     migrateOnBoot: env('MIGRATE_ON_BOOT', 'false') === 'true',
+    seedOnBoot,
+    adminEmail: env('ADMIN_EMAIL', 'admin@example.com'),
+    adminPassword,
     port: Number(env('PORT', '4000')),
     host: env('HOST', '0.0.0.0'),
     jwtSecret,

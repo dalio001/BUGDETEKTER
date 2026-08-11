@@ -1,6 +1,7 @@
 import { loadConfig } from './config.js';
 import { createPool } from './db.js';
 import { runMigrations } from './migrate.js';
+import { runSeed } from './seed.js';
 import { buildApp } from './app.js';
 
 async function main() {
@@ -8,6 +9,13 @@ async function main() {
   const db = createPool(config.databaseUrl);
   // Before the port opens, so a healthy /api/health implies the schema is current.
   if (config.migrateOnBoot) await runMigrations(db);
+  // For hosts with no shell (Railway, Fly, …) where `npm run seed` cannot be run
+  // by hand. Idempotent, so leaving it on across restarts is harmless. No API
+  // token is minted here — that would print a secret into the provider's deploy
+  // logs; create one in the dashboard under "API tokens" instead.
+  if (config.seedOnBoot) {
+    await runSeed(db, { adminEmail: config.adminEmail, adminPassword: config.adminPassword });
+  }
   const app = await buildApp(config, db);
 
   const shutdown = async () => {

@@ -14,9 +14,11 @@ Self-hosted, single-owner bug-monitoring tool with Claude integration. npm-works
 `sdk/` (embeddable browser SDK), `backend/` (Fastify 5 + Postgres), `dashboard/` (React + Vite,
 served by the backend), `mcp-server/` (MCP stdio server, 5 tools), `e2e/` (Playwright + MCP drive).
 
-## Status: WORKING & VERIFIED (v1)
+## Status: WORKING & VERIFIED (v1) — being deployed to Railway
 Branch `claude/bug-monitoring-reporting-tool-88kw31`, pushed. Verified from a clean clone against
 an empty database: migrate/seed, build, boot, and the full journey all pass.
+User chose **Railway** for hosting (account created, trial). The repo now supports a shell-less
+deploy end to end; the actual Railway build has not run yet — see "Open items".
 
 ## Completed
 - All spec components: SDK capture (exceptions, rejections, console, network, opt-in perf) with
@@ -41,12 +43,34 @@ an empty database: migrate/seed, build, boot, and the full journey all pass.
   non-root container with node as PID 1 for real SIGTERM handling; Postgres healthcheck forced to
   TCP (socket check is a false positive during initdb); seed is idempotent for API tokens;
   `start:prod` + `deploy/bugdetekter.service` for the bare-metal path.
+- Shell-less deploy (Railway/Fly/…): `SEED_ON_BOOT` creates the first admin + project during boot,
+  since managed hosts offer no way to run `npm run seed`. Seed logic moved to `backend/src/seed.ts`
+  (advisory-locked, idempotent, never resets an existing password, mints no token so secrets stay
+  out of deploy logs); `scripts/seed.ts` is now a thin CLI wrapper that still mints one. Boot
+  refuses an unset or published `ADMIN_PASSWORD`. Storage dir is probed for writability at boot and
+  warns (not fatal — ingest must survive a bad uploads volume) with the exact chown/UID fix.
+  `railway.json` pins the Dockerfile builder + `/api/health` healthcheck. Verified against a fresh
+  empty DB booted exactly as Railway will: migrate+seed on boot, login with the env credentials,
+  restart is idempotent (1 user/1 project, old password still valid, new env password rejected),
+  all three guards refuse, unwritable dir warns while `/api/health` stays 200, e2e 14/14 ×3.
 
 ## Open items / next steps (from readiness audit; none block local use)
 **Docker images cannot be pulled in this sandbox** — `production.cloudfront.docker.com` is blocked
 by egress policy (403), so `docker compose up` has still never been executed end-to-end. Everything
 it depends on was verified another way (see above + the fallback prod-mode boot), but the first real
-`docker compose up --build` on an unrestricted network remains unproven. Try it there first.
+`docker compose up --build` on an unrestricted network remains unproven. **The Railway deploy is
+therefore also the Dockerfile's first real build** — watch the build/deploy logs and expect one fix
+round. Two known unknowns there: whether the platform routes to a process bound on `0.0.0.0` (our
+default; if the deploy is unreachable, try `HOST=::` — note `::` fails in *this* sandbox with
+EAFNOSUPPORT, no IPv6, so it could not be tested here), and volume ownership vs. the non-root `node`
+user (boot now warns with the fix).
+
+**Flaky e2e assertion (pre-existing, not a regression):** `dashboard.spec.mjs` "issues list renders
+rows" failed once with `rows=0` immediately after a fresh ingest, then passed 3/3 on retry — the
+list momentarily re-renders empty when a live-feed update lands during initial load. A real (minor)
+UI race worth fixing in the Issues page. Note the whole e2e suite assumes a *fresh* database: on the
+long-lived dev DB, `event_count=2` and the 7d occurrence chart both fail purely from accumulated /
+aged data, not from bugs.
 
 Blockers for a public deployment: data retention/prune (events grow forever); noise filtering
 (`Script error.`/extensions/bots), and make `ignored` truly mute (new events still bump ignored
