@@ -122,3 +122,4 @@ Optional image slimming: move `tsx` to `dependencies` + `npm prune --omit=dev` i
 - docs: log the progress-hook commit — `e37772a` (2026-08-02)
 - docs: progress log entry for e37772a (written by the hook itself) — `8ca73d2` (2026-08-02)
 - fix(claude): stop the progress hook feeding itself — `a64026e` (2026-08-02)
+- feat(deploy): support hosts with no shell (SEED_ON_BOOT) for Railway — `d6517f4` (2026-08-11)
